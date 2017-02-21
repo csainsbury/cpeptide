@@ -345,6 +345,7 @@ logitRegressionFunctionWithBMI<-function(inputFrame,timePoint) {
 # 
 logitRegressionFunction(survivalSet,3)
 
+
 ## 
 ## 
 plotfilename <- paste("../GlCoSy/plots/cpep_test_output.pdf",sep="")
@@ -373,7 +374,7 @@ cpepMergeDT_firstCPEPval<-cpepMergeDT[flagFirstVal==1]
 # write.table(mergeCPepSD[flagFirstVal==1]$LinkId,file=outputName,sep=",",append=F,col.names=T)
 
 ## import drug data
-cpepDrugs<-read.csv("../GlCoSy/SD_workingSource/cpep_drugs_byLinkId.txt",stringsAsFactors = TRUE)
+cpepDrugs<-read.csv("~/R/GlCoSy/SD_workingSource/cpep_drugs_byLinkId.txt",stringsAsFactors = TRUE)
 cpepDrugs$LinkId<-as.numeric(levels(cpepDrugs$LinkId))[cpepDrugs$LinkId]
 cpepDrugsDT<-data.table(cpepDrugs)
 
@@ -415,7 +416,27 @@ logitRegression<-glm(insulin_at_0.5y ~ cpepMergeDT_firstCPEPval_firstIns$numeric
 logitRegression<-glm(insulin_at_1y ~ cpepMergeDT_firstCPEPval_firstIns$numericCPEP + cpepMergeDT_firstCPEPval_firstIns$ageAtTimeOfTestYears); summary(logitRegression)
 logitRegression<-glm(insulin_at_2y ~ cpepMergeDT_firstCPEPval_firstIns$numericCPEP + cpepMergeDT_firstCPEPval_firstIns$ageAtTimeOfTestYears); summary(logitRegression)
 
-subset(cpepMergeDT_firstCPEPval_firstIns,timeToFirstInsulinYears>=0)
+# subset to insulin naive
+cpepMergeDT_firstCPEPval_firstIns <- subset(cpepMergeDT_firstCPEPval_firstIns,timeToFirstInsulinYears>=0)
+    # logisitc regression loop:
+logitPlotFrame <- as.data.frame(matrix(0,nrow=0, ncol=2))
+colnames(logitPlotFrame) <- c("time", "estimate")
+
+    for (i in seq(0,24,0.01)) {
+      insulin_at_i_y<-ifelse(cpepMergeDT_firstCPEPval_firstIns$nPrescriptionsPerID>0 & cpepMergeDT_firstCPEPval_firstIns$timeToFirstInsulinYears>0 & cpepMergeDT_firstCPEPval_firstIns$timeToFirstInsulinYears<=(i/12),1,0)
+      logitRegression<-glm(insulin_at_i_y ~ cpepMergeDT_firstCPEPval_firstIns$numericCPEP + cpepMergeDT_firstCPEPval_firstIns$ageAtTimeOfTestYears); summary(logitRegression)
+      
+      reportFrame <- data.frame(i, logitRegression$coefficients[2])
+      colnames(reportFrame) <- c("time", "estimate")
+      
+      logitPlotFrame <- rbind(logitPlotFrame, reportFrame)
+
+    }
+plot(logitPlotFrame$time, logitPlotFrame$estimate)
+lines(logitPlotFrame$time, logitPlotFrame$estimate)
+
+
+
 
 
 plotfilename <- paste("../GlCoSy/plots/survivalPlot_timeToInsulin.pdf",sep="")
