@@ -215,7 +215,7 @@ simpleSurvivalPlot_timeToInsulin_BMI<-function(inputFrame,endDateUnix,ylimMin,st
   
   fit <- coxph(Surv(timeToDeathInterval, shortDeathEvent)~ageAtTimeOfTestYears+nearestBMI+pspline(numericCPEP), data=SurvivalData, x=TRUE)
   hr1 <- smoothHR(data=SurvivalData, coxfit=fit)
-  # plot(hr1, predictor="numericCPEP", prob=0, conf.level=0.95)
+  plot(hr1, predictor="numericCPEP", prob=0, conf.level=0.95)
   
   print(summary(fit))
   
@@ -430,7 +430,6 @@ colnames(logitPlotFrame) <- c("time", "estimate")
       colnames(reportFrame) <- c("time", "estimate")
       
       logitPlotFrame <- rbind(logitPlotFrame, reportFrame)
-
     }
 plot(logitPlotFrame$time, logitPlotFrame$estimate)
 lines(logitPlotFrame$time, logitPlotFrame$estimate)
@@ -464,46 +463,97 @@ logitRegressionFunction(subset(cpepMergeDT_firstCPEPval_firstIns,timeToFirstInsu
 
 ## first CPEP dataset
 # cpepMergeDT_firstCPEPval_firstIns
-# mergeCPEP_insulin_firstCPEP_firstIns   
+# mergeCPEP_insulin_firstCPEP_firstIns
+
+simpleSurvivalPlot_BMI<-function(inputFrame,endDateUnix,startAnalysisDays,followUpDays,ylimMin) {
+  
+  # simpleSurvivalPlot(survivalSet,returnUnixDateTime('2016-12-16'),(365.25/12)*0, 365.25*11,0.8)
+  
+  # endDateUnix<-returnUnixDateTime('2016-12-16'); startAnalysisDays<-0; followUpDays<-365.25*10
+  
+  SurvivalData<-inputFrame
+  SurvivalData$isDead<-ifelse(SurvivalData$DeathDateUnix>0,1,0)
+  
+  DaySeconds<-(60*60*24)
+  shortCensorPeriodStartDay  <- DaySeconds*startAnalysisDays
+  shortCensorPeriodEndDay    <- DaySeconds*followUpDays
+  
+  lastDOD<-endDateUnix
+  SurvivalData$dateOfDischarge<-SurvivalData$dateplustime1.x
+  SurvivalData$timeToDeath<-ifelse(SurvivalData$isDead==1,(SurvivalData$DeathDateUnix-SurvivalData$dateOfDischarge),0)
+  #		SurvivalData$timeToDeath<-SurvivalData$timeToDeath/DaySeconds
+  SurvivalData$timeToDeathInterval<-ifelse(SurvivalData$isDead==0,(lastDOD-SurvivalData$dateOfDischarge),SurvivalData$timeToDeath)
+  SurvivalData$timeToDeathInterval[is.na(SurvivalData$timeToDeathInterval)]<-0; SurvivalData<-subset(SurvivalData,timeToDeathInterval>0)
+  # SurvivalData$timeToDeathInterval<-SurvivalData$timeToDeathInterval/(60*60*24*365.25)
+  
+  SurvivalData$shortDeathEvent <- SurvivalData$isDead
+  SurvivalData$shortDeathEvent <- ifelse(SurvivalData$isDead==1 & SurvivalData$timeToDeath>=(shortCensorPeriodStartDay) & SurvivalData$timeToDeath<(shortCensorPeriodEndDay),1,0)	
+  
+  xlimMax<-ifelse(shortCensorPeriodEndDay<DaySeconds*10000,shortCensorPeriodEndDay,round(max(SurvivalData$timeToDeathInterval)))
+  
+  #  SurvivalData$sexDigit<-ifelse(nchar(SurvivalData$charID==9),as.numeric(substr(SurvivalData$charID,8,8)),as.numeric(substr(SurvivalData$charID,9,9)))
+  # SurvivalData$sexNumber<-ifelse(SurvivalData$sexDigit%%2==0,1,0)
+  #  SurvivalData$sex<-factor(1*(SurvivalData$sexNumber <1),levels=0:1,labels=c("F","M"))
+  
+  
+  mfitAge50<-survfit(Surv(timeToDeathInterval, shortDeathEvent) ~ 1, data = SurvivalData)
+  shortPlotTitle <- paste("Mortality, time ",round(shortCensorPeriodStartDay)/DaySeconds," to ",round(max(SurvivalData$timeToDeathInterval))/DaySeconds," days\n n= ",nrow(SurvivalData),", threshold: ",quantile(SurvivalData$hba1cIQRinRange)[3],sep="")
+  plot(mfitAge50,mark.time=T,lty=1:6,conf.int=F,col=c("black","red","blue","green","orange","purple"),main=shortPlotTitle,xlim=c(shortCensorPeriodStartDay,round(max(SurvivalData$timeToDeathInterval))),lwd=3,ylim=c(ylimMin,1))
+  
+  
+  mfitAge50<-survfit(Surv(timeToDeathInterval, shortDeathEvent) ~ (numericCPEP>quantile(numericCPEP)[3]), data = SurvivalData)
+  shortPlotTitle <- paste("Mortality, time ",round(shortCensorPeriodStartDay)/DaySeconds," to ",round(max(SurvivalData$timeToDeathInterval))/DaySeconds," days\n n= ",nrow(SurvivalData),", threshold: ",quantile(SurvivalData$hba1cIQRinRange)[3],sep="")
+  plot(mfitAge50,mark.time=T,lty=1:6,conf.int=F,col=c("black","red","blue","green","orange","purple"),main=shortPlotTitle,xlim=c(shortCensorPeriodStartDay,xlimMax),lwd=3,ylim=c(ylimMin,1))
+  mfitAge50.coxph<-coxph(Surv(timeToDeathInterval, shortDeathEvent) ~ ageAtTimeOfTestYears+bmiNumeric + (numericCPEP>quantile(numericCPEP)[3]), data = SurvivalData)
+  pVal <- summary(mfitAge50.coxph)$coef[,5]; HR <- round(exp(coef(mfitAge50.coxph)),2)
+  legendText <- paste("p = ",pVal," | HR = ",HR,sep="")
+  summarySurvfit <- summary(mfitAge50); legendNames <- row.names(summarySurvfit$table)
+  legend("bottomleft",c(legendNames),lty=1:6,col=c("black","red","blue","green","orange","purple"),cex=0.8); legend("bottomright",legendText,cex=0.6)
+  
+  print(mfitAge50.coxph)
+  
+  
+  fit <- coxph(Surv(timeToDeathInterval, shortDeathEvent)~ageAtTimeOfTestYears+pspline(numericCPEP), data=SurvivalData, x=TRUE)
+  hr1 <- smoothHR(data=SurvivalData, coxfit=fit)
+  plot(hr1, predictor="numericCPEP", prob=0, conf.level=0.95)
+  
+  ## distance from lowest HR value
+  SurvivalData$distanceFromValue <- sqrt((SurvivalData$numericCPEP-1.6)^2)
+  
+  mfitAge50<-survfit(Surv(timeToDeathInterval, shortDeathEvent) ~ (distanceFromValue>quantile(distanceFromValue)[3]), data = SurvivalData)
+  shortPlotTitle <- paste("Mortality, time ",round(shortCensorPeriodStartDay)/DaySeconds," to ",round(max(SurvivalData$timeToDeathInterval))/DaySeconds," days\n n= ",nrow(SurvivalData),", threshold: ",quantile(SurvivalData$hba1cIQRinRange)[3],sep="")
+  plot(mfitAge50,mark.time=T,lty=1:6,conf.int=F,col=c("black","red","blue","green","orange","purple"),main=shortPlotTitle,xlim=c(shortCensorPeriodStartDay,xlimMax),lwd=3,ylim=c(ylimMin,1))
+  mfitAge50.coxph<-coxph(Surv(timeToDeathInterval, shortDeathEvent) ~ ageAtTimeOfTestYears+bmiNumeric + (distanceFromValue>quantile(distanceFromValue)[3]), data = SurvivalData)
+  pVal <- summary(mfitAge50.coxph)$coef[,5]; HR <- round(exp(coef(mfitAge50.coxph)),2)
+  legendText <- paste("p = ",pVal," | HR = ",HR,sep="")
+  summarySurvfit <- summary(mfitAge50); legendNames <- row.names(summarySurvfit$table)
+  legend("bottomleft",c(legendNames),lty=1:6,col=c("black","red","blue","green","orange","purple"),cex=0.8); legend("bottomright",legendText,cex=0.6)
+  
+  
+  
+}
 
 ## load in BMI dataset
-bmiSetDF<-read.csv("../GlCoSy/SD_workingSource/BMISetDTclean.csv")
+bmiSetDF<-read.csv("~/R/GlCoSy/SD_workingSource/BMISetDTclean.csv")
 bmiSetDT<-data.table(bmiSetDF)
 bmiSetDT$dateplustime1_bmi<-bmiSetDT$dateplustime1; bmiSetDT$dateplustime1<-NULL
-
-
+ 
 ## find most recent BMI prior to CPEP measurement for each ID
 bmi_cpep_merge<-merge(cpepMergeDT_firstCPEPval_firstIns,bmiSetDT,by.x="LinkId",by.y="LinkId")
 bmi_cpep_merge$testDate_bmiDate_difference<-bmi_cpep_merge$dateplustime1.x - bmi_cpep_merge$dateplustime1_bmi
 ## all BMIs performed before the CPEP or up to 90 days post CPEP
 bmi_cpep_merge<-bmi_cpep_merge[testDate_bmiDate_difference>0 | testDate_bmiDate_difference>(60*60*24*365.25*10*-1)]
 
-findNearestMeasure<-function(all_metric_dateplustime1, metricNumeric, testDate_metricDate_difference,postTestTimeLimitDays) {
-  # all_metric_dateplustime1<-bmi_cpep_merge[LinkId==2147487389]$dateplustime1_bmi; metricNumeric<-bmi_cpep_merge[LinkId==2147487389]$bmiNumeric; testDate_metricDate_difference<-bmi_cpep_merge[LinkId==2147487389]$testDate_bmiDate_difference; postTestTimeLimitDays<-90
-
-  testFrame<-data.frame(all_metric_dateplustime1, metricNumeric, testDate_metricDate_difference)
-  testFrame<-subset(testFrame,testDate_metricDate_difference>(60*60*24*postTestTimeLimitDays*-1))
-  testFrame$flag<-ifelse(testFrame$testDate_metricDate_difference>0,1,0)
-  
-  if (sum(testFrame$flag>0)) {outputVals<-subset(testFrame,testDate_metricDate_difference==min(subset(testFrame,flag==1)$testDate_metricDate_difference))}
-  if (sum(testFrame$flag==0)) {outputVals<-subset(testFrame,testDate_metricDate_difference==max(subset(testFrame,flag==0)$testDate_metricDate_difference))}
-  
-  returnVals<-list(outputVals$all_metric_dateplustime1, outputVals$metricNumeric)
-  
-  
-  return(returnVals)
-  
-}
-
-bmi_cpep_merge[, c("nearestBMI_dateplustime1", "nearestBMI") := findNearestMeasure(dateplustime1_bmi, bmiNumeric, testDate_bmiDate_difference,90) , by=.(LinkId)]
-
+bmi_cpep_merge[, c("flagNearestBMI") := ifelse(sqrt(testDate_bmiDate_difference^2) == min(sqrt(testDate_bmiDate_difference^2)),1,0) , by=.(LinkId)]
 
 bmi_cpep_merge[, nBMImeasuresPerID := seq(1,.N,1) , by=.(LinkId)]
 
-bmi_cpep_merge<-bmi_cpep_merge[nBMImeasuresPerID==1]
+bmi_cpep_merge <- bmi_cpep_merge[flagNearestBMI == 1]
 
-bmi_cpep_merge <- bmi_cpep_merge[nearestBMI>0]
-# write.table(bmi_cpep_merge, file = "../GlCoSy/SD_workingSource/cpep_bmi_insulinNaive.csv",sep = ",")
+# bmi_cpep_merge<-bmi_cpep_merge[nBMImeasuresPerID==1]
+# 
+# bmi_cpep_merge <- bmi_cpep_merge[nearestBMI>0]
+# write.table(bmi_cpep_merge, file = "~/R/GlCoSy/SD_workingSource/cpep_bmi_insulinNaive.csv",sep = ",")
 
 ## plot bmi cpep threshold
 plotfilename <- paste("../GlCoSy/plots/CPEP_all_withBMIdata_CPEPthresh_0.76.pdf",sep="")
@@ -523,6 +573,8 @@ bmi_cpep_merge_forSurvival <- data.frame(bmi_cpep_merge$LinkId, bmi_cpep_merge$n
 survivalSet_BMI <- merge(survivalSet, bmi_cpep_merge_forSurvival, by.x = "LinkId", by.y = "bmi_cpep_merge.LinkId")
 
 logitRegressionFunctionWithBMI(survivalSet_BMI,3)
+
+# add insulin 1/0
 
 
 # time to insulin
