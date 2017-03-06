@@ -52,7 +52,7 @@ takeFirstValueFromEachPatient<-function(dateplustime1) {
 simpleSurvivalPlot<-function(inputFrame,endDateUnix,startAnalysisDays,followUpDays,ylimMin) {
   
   # simpleSurvivalPlot(survivalSet,returnUnixDateTime('2016-12-16'),(365.25/12)*0, 365.25*11,0.8)
-  # endDateUnix<-returnUnixDateTime('2016-12-16'); startAnalysisDays<-0; followUpDays<-365.25*10
+  # endDateUnix<-returnUnixDateTime('2016-12-16'); startAnalysisDays<-0; followUpDays<-365.25*3
   
   SurvivalData<-inputFrame
   SurvivalData$isDead<-ifelse(SurvivalData$DeathDateUnix>0,1,0)
@@ -72,7 +72,7 @@ simpleSurvivalPlot<-function(inputFrame,endDateUnix,startAnalysisDays,followUpDa
   SurvivalData$shortDeathEvent <- SurvivalData$isDead
   SurvivalData$shortDeathEvent <- ifelse(SurvivalData$isDead==1 & SurvivalData$timeToDeath>=(shortCensorPeriodStartDay) & SurvivalData$timeToDeath<(shortCensorPeriodEndDay),1,0)	
   
-  xlimMax<-ifelse(shortCensorPeriodEndDay<DaySeconds*10000,shortCensorPeriodEndDay,round(max(SurvivalData$timeToDeathInterval)))
+  xlimMax<-ifelse(shortCensorPeriodEndDay<DaySeconds*10000,shortCensorPeriodEndDay/DaySeconds,round(max(SurvivalData$timeToDeathInterval)))
   
   #  SurvivalData$sexDigit<-ifelse(nchar(SurvivalData$charID==9),as.numeric(substr(SurvivalData$charID,8,8)),as.numeric(substr(SurvivalData$charID,9,9)))
   # SurvivalData$sexNumber<-ifelse(SurvivalData$sexDigit%%2==0,1,0)
@@ -80,7 +80,7 @@ simpleSurvivalPlot<-function(inputFrame,endDateUnix,startAnalysisDays,followUpDa
   
   
   mfitAge50<-survfit(Surv(timeToDeathInterval, shortDeathEvent) ~ 1, data = SurvivalData)
-  shortPlotTitle <- paste("Mortality, time ",round(shortCensorPeriodStartDay)/DaySeconds," to ",round(max(SurvivalData$timeToDeathInterval))/DaySeconds," days\n n= ",nrow(SurvivalData),", threshold: ",quantile(SurvivalData$hba1cIQRinRange)[3],sep="")
+  shortPlotTitle <- paste("Mortality, time ",round(shortCensorPeriodStartDay)/DaySeconds," to ",xlimMax," days\n n= ",nrow(SurvivalData),", threshold: ",quantile(SurvivalData$hba1cIQRinRange)[3],sep="")
   plot(mfitAge50,mark.time=T,lty=1:6,conf.int=F,col=c("black","red","blue","green","orange","purple"),main=shortPlotTitle,xlim=c(shortCensorPeriodStartDay,round(max(SurvivalData$timeToDeathInterval))),lwd=3,ylim=c(ylimMin,1))
   
   
@@ -347,10 +347,10 @@ logitRegressionFunction(survivalSet,5)
 
 ## 
 ## 
-plotfilename <- paste("../GlCoSy/plots/cpep_test_output.pdf",sep="")
+plotfilename <- paste("~/R/_workingDirectory/cpeptide/cpeptide/plots/cpep_simpleSurvival.pdf",sep="")
 pdf(plotfilename, width=16, height=9)
 
-simpleSurvivalPlot(survivalSet,returnUnixDateTime('2016-12-16'),(365.25/12)*0, 365.25*3,3) 
+simpleSurvivalPlot(survivalSet,returnUnixDateTime('2016-12-16'),(365.25/12)*0, 365.25*3,0.8) 
 
 dev.off()
 #### ####
