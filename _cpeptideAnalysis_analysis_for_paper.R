@@ -49,10 +49,74 @@ takeFirstValueFromEachPatient<-function(dateplustime1) {
   return(reportFrame$flag)
 }
 
+simpleSurvival_rewrite <- function(inputFrame, followUpDays) {
+  # inputFrame <- survivalSet
+  # endDateUnix<-returnUnixDateTime('2016-12-16'); startAnalysisDays<-0; followUpDays<-365.25*3
+  
+  survivalTestFrame <- inputFrame
+  measurementPoint <- survivalTestFrame$dateplustime1
+  
+  survivalTestFrame$deadInFollowUp <- ifelse(survivalTestFrame$DeathDateUnix > 0 &
+                                               (survivalTestFrame$DeathDateUnix - survivalTestFrame$dateplustime1) < followUpDays*(60*60*24),
+                                             1,0)
+  
+  survivalTestFrame$timeToCensorOrEvent <- ifelse(survivalTestFrame$deadInFollowUp == 1,
+                                                  (survivalTestFrame$DeathDateUnix - survivalTestFrame$dateplustime1),
+                                                  (followUpDays*(60*60*24)))
+  
+  # plots
+  
+  # whole cohort
+  fit <- survfit(Surv(timeToCensorOrEvent / (60*60*24), deadInFollowUp) ~ 1, data = survivalTestFrame)
+  plot(fit, main = "survival whole cohort", ylim=c(0.8, 1))
+  
+  # cpeptide split at median
+  fit <- survfit(Surv(timeToCensorOrEvent / (60*60*24), deadInFollowUp) ~ (numericCPEP > quantile(numericCPEP)[3]), data = survivalTestFrame)
+  plot(fit, main = "survival split median", ylim=c(0.8, 1), col = c("black", "red"))
+  
+  fit.coxph <- coxph(Surv(timeToCensorOrEvent / (60*60*24), deadInFollowUp) ~ ageAtTimeOfTestYears + (numericCPEP > quantile(numericCPEP)[3]), data = survivalTestFrame)
+  pVal <- summary(fit.coxph)$coef[,5]; HR <- round(exp(coef(fit.coxph)),2)
+  legendText <- paste("p = ",pVal," | HR = ",HR,sep="")
+  summarySurvfit <- summary(fit); legendNames <- row.names(summarySurvfit$table)
+  legend("bottomleft",c(legendNames),lty=1:6,col=c("black","red","blue","green","orange","purple"),cex=0.8); legend("bottomright",legendText,cex=0.6)
+  
+  # cpeptide split at top quartile
+  fit <- survfit(Surv(timeToCensorOrEvent / (60*60*24), deadInFollowUp) ~ (numericCPEP > quantile(numericCPEP)[4]), data = survivalTestFrame)
+  plot(fit, main = "survival top quartile vs rest. coV age", ylim=c(0.8, 1), col = c("black", "red"))
+  
+  fit.coxph <- coxph(Surv(timeToCensorOrEvent / (60*60*24), deadInFollowUp) ~ ageAtTimeOfTestYears + (numericCPEP > quantile(numericCPEP)[4]), data = survivalTestFrame)
+  pVal <- summary(fit.coxph)$coef[,5]; HR <- round(exp(coef(fit.coxph)),2)
+  legendText <- paste("p = ",pVal," | HR = ",HR,sep="")
+  summarySurvfit <- summary(fit); legendNames <- row.names(summarySurvfit$table)
+  legend("bottomleft",c(legendNames),lty=1:6,col=c("black","red","blue","green","orange","purple"),cex=0.8); legend("bottomright",legendText,cex=0.6)
+  
+  # cpeptide split by quartile
+  fit <- survfit(Surv(timeToCensorOrEvent / (60*60*24), deadInFollowUp) ~ ((numericCPEP <= quantile(numericCPEP)[2]) +
+                                                                             ((numericCPEP > quantile(numericCPEP)[2]) & (numericCPEP <= quantile(numericCPEP)[3])) +
+                                                                             ((numericCPEP > quantile(numericCPEP)[3]) & (numericCPEP <= quantile(numericCPEP)[4])) +
+                                                                             (numericCPEP > quantile(numericCPEP)[4])), data = survivalTestFrame)
+  plot(fit, main = "survival by quartile. coV age", ylim=c(0.8, 1), col = c("black", "red", "blue", "green"))
+  
+  fit.coxph <- coxph(Surv(timeToCensorOrEvent / (60*60*24), deadInFollowUp) ~ ageAtTimeOfTestYears +
+                       (
+                         ((numericCPEP > quantile(numericCPEP)[2]) & (numericCPEP <= quantile(numericCPEP)[3])) +
+                           ((numericCPEP > quantile(numericCPEP)[3]) & (numericCPEP <= quantile(numericCPEP)[4])) +
+                           (numericCPEP > quantile(numericCPEP)[4])), data = survivalTestFrame)
+  pVal <- summary(fit.coxph)$coef[,5]; HR <- round(exp(coef(fit.coxph)),2)
+  legendText <- paste("p = ",pVal," | HR = ",HR,sep="")
+  summarySurvfit <- summary(fit); legendNames <- row.names(summarySurvfit$table)
+  legend("bottomleft",c(legendNames),lty=1:6,col=c("black","red","blue","green","orange","purple"),cex=0.8); legend("bottomright",legendText,cex=0.6)
+  
+  # continuous HR
+  fit <- coxph(Surv(timeToCensorOrEvent /  (60*60*24), deadInFollowUp) ~ ageAtTimeOfTestYears + pspline(numericCPEP), data=survivalTestFrame, x=TRUE)
+  hr1 <- smoothHR(data=survivalTestFrame, coxfit=fit)
+  plot(hr1, predictor="numericCPEP", prob=0, conf.level=0.95)
+}
+
 simpleSurvivalPlot<-function(inputFrame,endDateUnix,startAnalysisDays,followUpDays,ylimMin) {
   
   # simpleSurvivalPlot(survivalSet,returnUnixDateTime('2016-12-16'),(365.25/12)*0, 365.25*11,0.8)
-  # endDateUnix<-returnUnixDateTime('2016-12-16'); startAnalysisDays<-0; followUpDays<-365.25*3
+  # endDateUnix<-returnUnixDateTime('2016-12-16'); startAnalysisDays<-0; followUpDays<-365.25*5
   
   SurvivalData<-inputFrame
   SurvivalData$isDead<-ifelse(SurvivalData$DeathDateUnix>0,1,0)
@@ -70,7 +134,18 @@ simpleSurvivalPlot<-function(inputFrame,endDateUnix,startAnalysisDays,followUpDa
   # SurvivalData$timeToDeathInterval<-SurvivalData$timeToDeathInterval/(60*60*24*365.25)
   
   SurvivalData$shortDeathEvent <- SurvivalData$isDead
-  SurvivalData$shortDeathEvent <- ifelse(SurvivalData$isDead==1 & SurvivalData$timeToDeath>=(shortCensorPeriodStartDay) & SurvivalData$timeToDeath<(shortCensorPeriodEndDay),1,0)	
+  # if dead between start and end then dead
+  SurvivalData$shortDeathEvent <- ifelse(SurvivalData$isDead==1 & SurvivalData$timeToDeath>=(shortCensorPeriodStartDay) & SurvivalData$timeToDeath<(shortCensorPeriodEndDay),1,0)
+    # if dead after end then time to death = right censored to end time (max FU time)
+    SurvivalData$timeToDeathInterval<-ifelse(SurvivalData$isDead==1 & SurvivalData$timeToDeath>(shortCensorPeriodEndDay),
+                                             (SurvivalData$dateOfDischarge + shortCensorPeriodEndDay),
+                                             SurvivalData$timeToDeath)
+    # if not dead then right censored to max FU time
+    SurvivalData$timeToDeathInterval<-ifelse(SurvivalData$isDead==0,
+                                             (SurvivalData$dateOfDischarge + shortCensorPeriodEndDay),
+                                             (SurvivalData$dateOfDischarge + shortCensorPeriodEndDay))
+
+  
   
   xlimMax<-ifelse(shortCensorPeriodEndDay<DaySeconds*10000,shortCensorPeriodEndDay/DaySeconds,round(max(SurvivalData$timeToDeathInterval)))
   
@@ -342,29 +417,34 @@ logitRegressionFunctionWithBMI<-function(inputFrame,timePoint) {
 #     }
 
 # 
-logitRegressionFunction(survivalSet,5)
-
+logitRegressionFunction(survivalSet,3)
 
 ## 
 ## 
 plotfilename <- paste("~/R/_workingDirectory/cpeptide/cpeptide/plots/cpep_simpleSurvival.pdf",sep="")
 pdf(plotfilename, width=16, height=9)
 
-simpleSurvivalPlot(survivalSet,returnUnixDateTime('2016-12-16'),(365.25/12)*0, 365.25*3,0.8) 
+yrFU = 3
+
+# simpleSurvivalPlot(survivalSet,returnUnixDateTime('2016-12-16'),(365.25/12)*0, 365.25*3,0.8) 
+simpleSurvival_rewrite(survivalSet, 365.25*yrFU)
+simpleSurvival_rewrite(subset(survivalSet, ageAtTimeOfTestYears<60), 365.25*yrFU)
+simpleSurvival_rewrite(subset(survivalSet, ageAtTimeOfTestYears>=60), 365.25*yrFU)
 
 dev.off()
+
 #### ####
 
 ##
-boxplot(cpepMergeDT[flagFirstVal==1]$numericCPEP ~ cut(cpepMergeDT[flagFirstVal==1]$ageAtTimeOfTest/(60*60*24*365.25),breaks=seq(0,100,5)),varwidth=T,ylim=c(0,2))
-
-boxplot(cpepMergeDT[flagFirstVal==1 & (DiabetesMellitusType_Mapped=="Type 1 Diabetes Mellitus" | DiabetesMellitusType_Mapped=="Latent Autoimmune Diabetes of Adulthood")]$numericCPEP ~ cut(cpepMergeDT[flagFirstVal==1 & (DiabetesMellitusType_Mapped=="Type 1 Diabetes Mellitus" | DiabetesMellitusType_Mapped=="Latent Autoimmune Diabetes of Adulthood")]$ageAtTimeOfTest/(60*60*24*365.25),breaks=seq(0,100,5)),varwidth=T,main=paste("type 1 first cpep in record. n=",nrow(cpepMergeDT[flagFirstVal==1 & (DiabetesMellitusType_Mapped=="Type 1 Diabetes Mellitus" | DiabetesMellitusType_Mapped=="Latent Autoimmune Diabetes of Adulthood")]),sep=""),ylim=c(0,1))
-
-boxplot(cpepMergeDT[flagFirstVal==1 & (DiabetesMellitusType_Mapped=="Type 2 Diabetes Mellitus" | DiabetesMellitusType_Mapped=="Impaired Fasting Glucose" | DiabetesMellitusType_Mapped=="Maturity Onset Diabetes of Youth" | DiabetesMellitusType_Mapped=="Impaired Glucose Tolerance" | DiabetesMellitusType_Mapped=="History of Gestational Diabetes" | DiabetesMellitusType_Mapped=="Current Gestational Diabetes")]$numericCPEP ~ 
-          cut(cpepMergeDT[flagFirstVal==1 & (DiabetesMellitusType_Mapped=="Type 2 Diabetes Mellitus" | DiabetesMellitusType_Mapped=="Impaired Fasting Glucose" | DiabetesMellitusType_Mapped=="Maturity Onset Diabetes of Youth" | DiabetesMellitusType_Mapped=="Impaired Glucose Tolerance" | DiabetesMellitusType_Mapped=="History of Gestational Diabetes" | DiabetesMellitusType_Mapped=="Current Gestational Diabetes")]$ageAtTimeOfTest/(60*60*24*365.25),breaks=seq(0,100,10)),
-        varwidth=T,
-        main=paste("type 2 first cpep in record. n=",nrow(cpepMergeDT[flagFirstVal==1 & (DiabetesMellitusType_Mapped=="Type 2 Diabetes Mellitus" | DiabetesMellitusType_Mapped=="Impaired Fasting Glucose" | DiabetesMellitusType_Mapped=="Maturity Onset Diabetes of Youth" | DiabetesMellitusType_Mapped=="Impaired Glucose Tolerance" | DiabetesMellitusType_Mapped=="History of Gestational Diabetes" | DiabetesMellitusType_Mapped=="Current Gestational Diabetes")]),sep=""),
-        ylim=c(0,2))
+# boxplot(cpepMergeDT[flagFirstVal==1]$numericCPEP ~ cut(cpepMergeDT[flagFirstVal==1]$ageAtTimeOfTest/(60*60*24*365.25),breaks=seq(0,100,5)),varwidth=T,ylim=c(0,2))
+# 
+# boxplot(cpepMergeDT[flagFirstVal==1 & (DiabetesMellitusType_Mapped=="Type 1 Diabetes Mellitus" | DiabetesMellitusType_Mapped=="Latent Autoimmune Diabetes of Adulthood")]$numericCPEP ~ cut(cpepMergeDT[flagFirstVal==1 & (DiabetesMellitusType_Mapped=="Type 1 Diabetes Mellitus" | DiabetesMellitusType_Mapped=="Latent Autoimmune Diabetes of Adulthood")]$ageAtTimeOfTest/(60*60*24*365.25),breaks=seq(0,100,5)),varwidth=T,main=paste("type 1 first cpep in record. n=",nrow(cpepMergeDT[flagFirstVal==1 & (DiabetesMellitusType_Mapped=="Type 1 Diabetes Mellitus" | DiabetesMellitusType_Mapped=="Latent Autoimmune Diabetes of Adulthood")]),sep=""),ylim=c(0,1))
+# 
+# boxplot(cpepMergeDT[flagFirstVal==1 & (DiabetesMellitusType_Mapped=="Type 2 Diabetes Mellitus" | DiabetesMellitusType_Mapped=="Impaired Fasting Glucose" | DiabetesMellitusType_Mapped=="Maturity Onset Diabetes of Youth" | DiabetesMellitusType_Mapped=="Impaired Glucose Tolerance" | DiabetesMellitusType_Mapped=="History of Gestational Diabetes" | DiabetesMellitusType_Mapped=="Current Gestational Diabetes")]$numericCPEP ~ 
+#           cut(cpepMergeDT[flagFirstVal==1 & (DiabetesMellitusType_Mapped=="Type 2 Diabetes Mellitus" | DiabetesMellitusType_Mapped=="Impaired Fasting Glucose" | DiabetesMellitusType_Mapped=="Maturity Onset Diabetes of Youth" | DiabetesMellitusType_Mapped=="Impaired Glucose Tolerance" | DiabetesMellitusType_Mapped=="History of Gestational Diabetes" | DiabetesMellitusType_Mapped=="Current Gestational Diabetes")]$ageAtTimeOfTest/(60*60*24*365.25),breaks=seq(0,100,10)),
+#         varwidth=T,
+#         main=paste("type 2 first cpep in record. n=",nrow(cpepMergeDT[flagFirstVal==1 & (DiabetesMellitusType_Mapped=="Type 2 Diabetes Mellitus" | DiabetesMellitusType_Mapped=="Impaired Fasting Glucose" | DiabetesMellitusType_Mapped=="Maturity Onset Diabetes of Youth" | DiabetesMellitusType_Mapped=="Impaired Glucose Tolerance" | DiabetesMellitusType_Mapped=="History of Gestational Diabetes" | DiabetesMellitusType_Mapped=="Current Gestational Diabetes")]),sep=""),
+#         ylim=c(0,2))
 
 cpepMergeDT_firstCPEPval<-cpepMergeDT[flagFirstVal==1]
 
