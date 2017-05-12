@@ -390,7 +390,7 @@ logitRegressionFunctionWithBMI<-function(inputFrame,timePoint) {
   
   dead_at_timePoint<-ifelse(inputFrame$DeathDateUnix>0 & (inputFrame$DeathDateUnix-inputFrame$dateplustime1)<=(timePoint*(60*60*24*365.25)),1,0)
   
-  testing_set<-data.frame(inputFrame$numericCPEP, inputFrame$ageAtTimeOfTestYears, inputFrame$bmi_cpep_merge.nearestBMI, dead_at_timePoint)
+  testing_set<-data.frame(inputFrame$numericCPEP, inputFrame$ageAtTimeOfTestYears, inputFrame$bmi_cpep_merge.bmiNumeric, dead_at_timePoint)
   # testing_set[-3] = scale(testing_set[-3])
   
   logitRegression<-glm(testing_set$dead_at_timePoint ~ .,
@@ -632,8 +632,9 @@ bmi_cpep_merge<-bmi_cpep_merge[testDate_bmiDate_difference>0 | testDate_bmiDate_
 bmi_cpep_merge[, c("flagNearestBMI") := ifelse(sqrt(testDate_bmiDate_difference^2) == min(sqrt(testDate_bmiDate_difference^2)),1,0) , by=.(LinkId)]
 
 bmi_cpep_merge[, nBMImeasuresPerID := seq(1,.N,1) , by=.(LinkId)]
+bmi_cpep_merge$testDate_bmiDate_differenceYears <- bmi_cpep_merge$testDate_bmiDate_difference / (60*60*24*365.25)
 
-bmi_cpep_merge <- bmi_cpep_merge[flagNearestBMI == 1]
+bmi_cpep_merge <- bmi_cpep_merge[flagNearestBMI == 1 & testDate_bmiDate_differenceYears >= -1]
 
 # bmi_cpep_merge<-bmi_cpep_merge[nBMImeasuresPerID==1]
 # 
@@ -644,8 +645,17 @@ bmi_cpep_merge <- bmi_cpep_merge[flagNearestBMI == 1]
 plotfilename <- paste("../GlCoSy/plots/CPEP_all_withBMIdata_CPEPthresh_0.76.pdf",sep="")
 pdf(plotfilename, width=16, height=9)
 
+bmi_testSet <- subset(bmi_cpep_merge,timeToFirstInsulinYears>=0)
+
 medianCPEP <- quantile(subset(bmi_cpep_merge,timeToFirstInsulinYears>=0)$numericCPEP)[3]
 simpleSurvivalPlot_timeToInsulin_BMI(subset(bmi_cpep_merge,timeToFirstInsulinYears>=0), returnUnixDateTime('2016-12-16'), 0, (365.25/12)*0, 365.25*1,medianCPEP)
+
+# metrics for paper
+print(medianCPEP)
+print(nrow(bmi_testSet))
+print(quantile(bmi_testSet$ageAtTimeOfTestYears))
+print(quantile(bmi_testSet$bmiNumeric))
+print(sum(ifelse(bmi_testSet$Sex == "M", 1, 0)))
 
 
 dev.off()
@@ -654,10 +664,10 @@ dev.off()
 # logit with BMI as coV
 
 # mortality
-bmi_cpep_merge_forSurvival <- data.frame(bmi_cpep_merge$LinkId, bmi_cpep_merge$nearestBMI)
+bmi_cpep_merge_forSurvival <- data.frame(bmi_cpep_merge$LinkId, bmi_cpep_merge$bmiNumeric)
 survivalSet_BMI <- merge(survivalSet, bmi_cpep_merge_forSurvival, by.x = "LinkId", by.y = "bmi_cpep_merge.LinkId")
 
-logitRegressionFunctionWithBMI(survivalSet_BMI,3)
+logitRegressionFunctionWithBMI(survivalSet_BMI,5)
 
 # add insulin 1/0
 
@@ -668,9 +678,9 @@ insulin_at_0.5y<-ifelse(bmi_cpep_merge$nPrescriptionsPerID>0 & bmi_cpep_merge$ti
 insulin_at_1y<-ifelse(bmi_cpep_merge$nPrescriptionsPerID>0 & bmi_cpep_merge$timeToFirstInsulinYears<=1,1,0)
 insulin_at_2y<-ifelse(bmi_cpep_merge$nPrescriptionsPerID>0 & bmi_cpep_merge$timeToFirstInsulinYears<=1,2,0)
 
-logitRegression<-glm(insulin_at_0.5y ~ bmi_cpep_merge$numericCPEP + bmi_cpep_merge$ageAtTimeOfTestYears + bmi_cpep_merge$nearestBMI); summary(logitRegression)
-logitRegression<-glm(insulin_at_1y ~ bmi_cpep_merge$numericCPEP + bmi_cpep_merge$ageAtTimeOfTestYears + bmi_cpep_merge$nearestBMI); summary(logitRegression)
-logitRegression<-glm(insulin_at_2y ~ bmi_cpep_merge$numericCPEP + bmi_cpep_merge$ageAtTimeOfTestYears + bmi_cpep_merge$nearestBMI); summary(logitRegression)
+logitRegression<-glm(insulin_at_0.5y ~ bmi_cpep_merge$numericCPEP + bmi_cpep_merge$ageAtTimeOfTestYears + bmi_cpep_merge$bmiNumeric); summary(logitRegression)
+logitRegression<-glm(insulin_at_1y ~ bmi_cpep_merge$numericCPEP + bmi_cpep_merge$ageAtTimeOfTestYears + bmi_cpep_merge$bmiNumeric); summary(logitRegression)
+logitRegression<-glm(insulin_at_2y ~ bmi_cpep_merge$numericCPEP + bmi_cpep_merge$ageAtTimeOfTestYears + bmi_cpep_merge$bmiNumeric); summary(logitRegression)
 
 #######################
 # BMI subgroup analysis
@@ -739,5 +749,12 @@ for (p in seq(1,5,1)) {
   if (p>1) { points(log(plotFrame$time), plotFrame$prob, col=p); lines(log(plotFrame$time), plotFrame$prob, col=p) }
     
 }
+
+# metrics for paper
+print(nrow(ppv_test_set))
+print(quantile(ppv_test_set$ageAtTimeOfTestYears))
+print(sum(ifelse(ppv_test_set$Sex == "M", 1, 0)))
+
+
 
 
