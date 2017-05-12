@@ -279,7 +279,7 @@ simpleSurvivalPlot_timeToInsulin_BMI<-function(inputFrame,endDateUnix,ylimMin,st
   mfitAge50<-survfit(Surv(timeToDeathInterval, shortDeathEvent) ~ (numericCPEP<cpepThreshold), data = SurvivalData)
   shortPlotTitle <- paste("insulin free survival, time ",round(shortCensorPeriodStartDay)/DaySeconds," to ",xlimMax/DaySeconds," days\n n= ",nrow(SurvivalData),", threshold: ",cpepThreshold,"\ncovariables: age at time of test",sep="")
   plot(mfitAge50,mark.time=T,lty=1:6,conf.int=F,col=c("black","red","blue","green","orange","purple"),main=shortPlotTitle,xlim=c(shortCensorPeriodStartDay,xlimMax),lwd=3,ylim=c(ylimMin,1))
-  mfitAge50.coxph<-coxph(Surv(timeToDeathInterval, shortDeathEvent) ~ ageAtTimeOfTestYears+nearestBMI+(numericCPEP<cpepThreshold), data = SurvivalData)
+  mfitAge50.coxph<-coxph(Surv(timeToDeathInterval, shortDeathEvent) ~ ageAtTimeOfTestYears+bmiNumeric+(numericCPEP<cpepThreshold), data = SurvivalData)
   pVal <- summary(mfitAge50.coxph)$coef[,5]; HR <- round(exp(coef(mfitAge50.coxph)),2)
   legendText <- paste("p = ",pVal," | HR = ",HR,sep="")
   summarySurvfit <- summary(mfitAge50); legendNames <- row.names(summarySurvfit$table)
@@ -288,7 +288,7 @@ simpleSurvivalPlot_timeToInsulin_BMI<-function(inputFrame,endDateUnix,ylimMin,st
   print(mfitAge50.coxph)
   
   
-  fit <- coxph(Surv(timeToDeathInterval, shortDeathEvent)~ageAtTimeOfTestYears+nearestBMI+pspline(numericCPEP), data=SurvivalData, x=TRUE)
+  fit <- coxph(Surv(timeToDeathInterval, shortDeathEvent)~ageAtTimeOfTestYears+bmiNumeric+pspline(numericCPEP), data=SurvivalData, x=TRUE)
   hr1 <- smoothHR(data=SurvivalData, coxfit=fit)
   plot(hr1, predictor="numericCPEP", prob=0, conf.level=0.95)
   
@@ -432,6 +432,12 @@ simpleSurvival_rewrite(subset(survivalSet, ageAtTimeOfTestYears<60), 365.25*yrFU
 simpleSurvival_rewrite(subset(survivalSet, ageAtTimeOfTestYears>=60), 365.25*yrFU)
 
 dev.off()
+
+## stats for results section:
+table(survivalSet$DiabetesMellitusType_Mapped)
+maleCount <- ifelse(survivalSet$Sex == "M", 1, 0); sum(maleCount)
+quantile(survivalSet$ageAtTimeOfTestYears)
+
 
 #### ####
 
